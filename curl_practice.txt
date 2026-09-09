@@ -1,0 +1,184 @@
+# curl Practice Reference
+# Exercise: Build Your API Testing Toolkit
+# Module 4 — REST API Fundamentals, Lesson 10
+
+# ============================================================
+# COMMAND 1: GET all users (formatted output)
+# ============================================================
+# Run this:
+curl https://jsonplaceholder.typicode.com/users | python3 -m json.tool
+
+# What I got:
+# A JSON array of 10 user objects, pretty-printed by json.tool. Each user has
+# id, name, username, email, a nested address object (street, suite, city,
+# zipcode, and a nested geo object with lat/lng), phone, website, and a nested
+# company object (name, catchPhrase, bs).
+#
+# First two entries:
+#
+# [
+#     {
+#         "id": 1,
+#         "name": "Leanne Graham",
+#         "username": "Bret",
+#         "email": "Sincere@april.biz",
+#         "address": {
+#             "street": "Kulas Light",
+#             "suite": "Apt. 556",
+#             "city": "Gwenborough",
+#             "zipcode": "92998-3874",
+#             "geo": {
+#                 "lat": "-37.3159",
+#                 "lng": "81.1496"
+#             }
+#         },
+#         "phone": "1-770-736-8031 x56442",
+#         "website": "hildegard.org",
+#         "company": {
+#             "name": "Romaguera-Crona",
+#             "catchPhrase": "Multi-layered client-server neural-net",
+#             "bs": "harness real-time e-markets"
+#         }
+#     },
+#     {
+#         "id": 2,
+#         "name": "Ervin Howell",
+#         "username": "Antonette",
+#         "email": "Shanna@melissa.tv",
+#         "address": {
+#             "street": "Victor Plains",
+#             "suite": "Suite 879",
+#             "city": "Wisokyburgh",
+#             "zipcode": "90566-7771",
+#             "geo": {
+#                 "lat": "-43.9509",
+#                 "lng": "-34.4618"
+#             }
+#         },
+#         "phone": "010-692-6593 x09125",
+#         ...
+#     },
+#     ... 8 more users ...
+# ]
+#
+# Note: the address is nested two levels deep, so in Python the city is
+# user["address"]["city"], not user["city"]. That matters for Part 2.
+#
+# Tip: use `curl -s` to suppress the progress meter when piping — otherwise
+# curl's transfer stats get mixed into your terminal output.
+
+# ============================================================
+# COMMAND 2: GET user 3's todos
+# ============================================================
+# Run this:
+curl "https://jsonplaceholder.typicode.com/todos?userId=3"
+
+# What I got:
+# A JSON array of todo objects, each with userId, id, title, completed.
+# The ids run 41-60, since each user gets a block of 20.
+#
+# [
+#   {
+#     "userId": 3,
+#     "id": 41,
+#     "title": "aliquid amet impedit consequatur aspernatur placeat eaque fugiat suscipit",
+#     "completed": false
+#   },
+#   {
+#     "userId": 3,
+#     "id": 42,
+#     "title": "rerum perferendis error quia ut eveniet",
+#     "completed": false
+#   },
+#   {
+#     "userId": 3,
+#     "id": 43,
+#     "title": "tempore ut sint quis recusandae",
+#     "completed": true
+#   },
+#   ... 17 more ...
+# ]
+#
+# How many todos does user 3 have?  20  (7 completed, 13 not)
+#
+# Note the quotes around the URL. Without them the shell may try to interpret
+# the ? and & characters, so always quote URLs that contain a query string.
+# ?userId=3 is a query parameter — filtering happens server-side here, which
+# is different from the client-side filtering in search_posts() in Part 2.
+
+# ============================================================
+# COMMAND 3: POST a new post
+# ============================================================
+# Run this:
+curl -X POST https://jsonplaceholder.typicode.com/posts \
+  -H "Content-Type: application/json" \
+  -d '{"title": "My Test Post", "body": "Hello from curl!", "userId": 1}'
+
+# What I got:
+# {
+#   "title": "My Test Post",
+#   "body": "Hello from curl!",
+#   "userId": 1,
+#   "id": 101
+# }
+#
+# What id was returned?  101
+#
+# JSONPlaceholder fakes the write. It echoes the fields back and always assigns
+# id 101 (there are 100 real posts, so the "next" id is always 101). Running the
+# command again returns 101 again. Nothing is actually persisted — GET /posts/101
+# returns an empty object.
+#
+# The -H "Content-Type: application/json" header is what tells the server to
+# parse the -d payload as JSON. Drop it and curl defaults to
+# application/x-www-form-urlencoded, and the body comes back mangled.
+
+# ============================================================
+# COMMAND 4: Show response headers only (-I flag)
+# ============================================================
+# Run this:
+curl -I https://jsonplaceholder.typicode.com/posts/1
+
+# What I got:
+# HTTP/2 200
+# date: Wed, 09 Sep 2026 04:50:38 GMT
+# content-type: application/json; charset=utf-8
+# content-length: 292
+# access-control-allow-credentials: true
+# cache-control: max-age=43200
+# etag: W/"124-yiKdLzqO5gfBrJFrcdJ8Yq0LGnU"
+# expires: -1
+# pragma: no-cache
+# nel: {"report_to":"heroku-nel", ...}
+# report-to: {"group":"heroku-nel", ...}
+# server: cloudflare
+# vary: Origin, Accept-Encoding
+# via: 2.0 heroku-router
+# x-content-type-options: nosniff
+# x-powered-by: Express
+# x-ratelimit-limit: 1000
+# x-ratelimit-remaining: 999
+# x-ratelimit-reset: 1785186983
+# age: 26825
+# accept-ranges: bytes
+# cf-cache-status: HIT
+# cf-ray: a38392c069dfb55b-ATL
+# alt-svc: h3=":443"; ma=86400
+#
+# What was the Content-Type?
+#   application/json; charset=utf-8
+#
+# What caching headers did you see?
+#   cache-control: max-age=43200  -> cacheable for 12 hours
+#   etag: W/"124-yiKdLzqO..."     -> weak validator; send it back as
+#                                   If-None-Match to get a 304 if unchanged
+#   expires: -1 and pragma: no-cache -> legacy HTTP/1.0 headers that contradict
+#                                   cache-control. Modern clients follow
+#                                   cache-control and ignore these.
+#   age: 26825                   -> this response sat in a cache ~7.5 hours
+#   cf-cache-status: HIT         -> served by Cloudflare's edge cache, never
+#                                   reached the origin server
+#
+# -I sends a HEAD request rather than a GET, so you get headers with no body.
+# Note content-length: 292 still reports the size the body *would* be.
+# If you want headers AND body, use -i instead of -I.
