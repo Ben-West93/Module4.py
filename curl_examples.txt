@@ -1,0 +1,188 @@
+================================================================
+Module 4 Project - curl examples
+================================================================
+
+Every command in Part A was run and verified. The -i flag prints
+response headers, which is where the status line and Content-Type
+live. Add | python -m json.tool to pretty-print a body.
+
+Handy for the presentation: these show the same calls the Python
+script makes, minus the Python.
+
+
+================================================================
+PART A - Real calls from api_explorer.py
+================================================================
+
+--- JSONPlaceholder ------------------------------------------
+
+# Collection resource: all users
+curl -i https://jsonplaceholder.typicode.com/users
+
+# Member resource: one user by id
+curl -i https://jsonplaceholder.typicode.com/users/1
+
+# Query parameters: filter the posts collection by owner
+curl -i "https://jsonplaceholder.typicode.com/posts?userId=3"
+
+# Nested resource: the posts belonging to user 1
+curl -i https://jsonplaceholder.typicode.com/users/1/posts
+
+# POST: create a post. Returns 201 Created with a new id.
+curl -i -X POST https://jsonplaceholder.typicode.com/posts \
+  -H "Content-Type: application/json" \
+  -d '{"title":"What I learned about REST","body":"Resources are nouns.","userId":1}'
+
+# PUT: replace post 1 in full. Idempotent.
+curl -i -X PUT https://jsonplaceholder.typicode.com/posts/1 \
+  -H "Content-Type: application/json" \
+  -d '{"id":1,"title":"Updated title","body":"Replaced body","userId":1}'
+
+# DELETE: remove post 1. Returns 200 OK with an empty object.
+curl -i -X DELETE https://jsonplaceholder.typicode.com/posts/1
+
+# Proof the writes are simulated: the resource POST claimed to
+# create does not exist. Returns 404 Not Found.
+curl -i https://jsonplaceholder.typicode.com/posts/101
+
+# Rate limit headers - the only one of the three APIs that sends them
+curl -sI https://jsonplaceholder.typicode.com/users/1 | grep -i ratelimit
+
+
+--- PokeAPI ---------------------------------------------------
+
+# Specific resource. Note height=4 and weight=60 are decimetres
+# and hectograms, not metres and kilograms.
+curl -i https://pokeapi.co/api/v2/pokemon/25
+
+# HATEOAS: this URL came out of the response above, at
+# types[0].type.url - the client followed a link it was handed.
+curl -i https://pokeapi.co/api/v2/type/13/
+
+# Pagination: count plus full next/previous URLs
+curl -i "https://pokeapi.co/api/v2/pokemon?limit=5&offset=20"
+
+# Just the top-level keys of the Pikachu response (21 of them)
+curl -s https://pokeapi.co/api/v2/pokemon/25 \
+  | python -c "import json,sys; print(sorted(json.load(sys.stdin).keys()))"
+
+
+--- Open-Meteo ------------------------------------------------
+
+# Geocoding lives on a different hostname than forecasts.
+# Returns three real places named Tokyo.
+curl -i "https://geocoding-api.open-meteo.com/v1/search?name=Tokyo&count=3"
+
+# Current conditions plus a 3-day forecast. Every data block
+# comes with a matching units block.
+curl -i "https://api.open-meteo.com/v1/forecast?latitude=35.6895&longitude=139.69171&current=temperature_2m,wind_speed_10m&daily=temperature_2m_max,temperature_2m_min&forecast_days=3&timezone=auto"
+
+# Error handling: latitude out of range returns a real 400
+# with an explanation you could show a user directly.
+curl -i "https://api.open-meteo.com/v1/forecast?latitude=999&longitude=999&current=temperature_2m"
+
+
+--- The deprecated API (appendix of api_documentation) ---------
+
+# Returns 200 OK with an error in the body. The status code lies,
+# which is exactly why the first version of the script crashed.
+curl -i "https://restcountries.com/v3.1/name/Japan"
+
+# The replacement requires a key
+curl -i "https://restcountries.com/countries/v5/names.common/Japan"
+
+
+================================================================
+PART B - The Study Tracker API from api_design.md
+================================================================
+
+These describe the designed API. It is a paper design, so these
+commands will not run against a live server. BASE is a
+placeholder for wherever it would be deployed.
+
+BASE="https://api.studytracker.example/v1"
+TOKEN="<jwt from POST /auth/login>"
+
+
+--- Public endpoints (no auth) --------------------------------
+
+# Register
+curl -i -X POST "$BASE/students" \
+  -H "Content-Type: application/json" \
+  -d '{"email":"ben@example.edu","password":"...","display_name":"Ben","timezone":"America/Chicago"}'
+
+# Log in, receive a JWT
+curl -i -X POST "$BASE/auth/login" \
+  -H "Content-Type: application/json" \
+  -d '{"email":"ben@example.edu","password":"..."}'
+
+# Public course catalog - no Authorization header needed
+curl -i "$BASE/courses"
+
+
+--- Authenticated endpoints -----------------------------------
+
+# Log a study session. Note there is no student_id in the body:
+# the server reads it from the token.
+curl -i -X POST "$BASE/study_sessions" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"course_id":7,"started_at":"2026-09-10T14:30:00Z","duration_minutes":90,"notes":"Recursion problem set.","was_productive":true}'
+
+# THE FILTERING ENDPOINT
+# "My CS-210 sessions from last week, longest first"
+curl -i -G "$BASE/study_sessions" \
+  -H "Authorization: Bearer $TOKEN" \
+  --data-urlencode "course_id=7" \
+  --data-urlencode "start_date=2026-09-07" \
+  --data-urlencode "end_date=2026-09-13" \
+  --data-urlencode "sort=-duration_minutes"
+
+# Set a weekly target
+curl -i -X POST "$BASE/goals" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"course_id":7,"week_start_date":"2026-09-07","target_minutes":600}'
+
+# Computed progress summary
+curl -i -G "$BASE/students/3/progress" \
+  -H "Authorization: Bearer $TOKEN" \
+  --data-urlencode "week_start=2026-09-07"
+
+# Nested resource: my sessions in one course
+curl -i "$BASE/courses/7/study_sessions" -H "Authorization: Bearer $TOKEN"
+
+# Delete - owner only
+curl -i -X DELETE "$BASE/study_sessions/1042" -H "Authorization: Bearer $TOKEN"
+
+
+--- Deliberate error cases from Section 6 ----------------------
+
+# 401 Unauthorized - no token at all
+curl -i -X POST "$BASE/study_sessions" \
+  -H "Content-Type: application/json" \
+  -d '{"course_id":7,"started_at":"2026-09-10T14:30:00Z","duration_minutes":90}'
+
+# 400 Bad Request - malformed JSON (missing closing brace)
+curl -i -X POST "$BASE/study_sessions" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"course_id":7,"duration_minutes":90'
+
+# 422 Unprocessable Entity - valid JSON, impossible value
+curl -i -X POST "$BASE/study_sessions" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"course_id":7,"started_at":"2026-09-10T14:30:00Z","duration_minutes":-30}'
+
+# 404 Not Found - course exists but the student is not enrolled
+curl -i -X POST "$BASE/study_sessions" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"course_id":9999,"started_at":"2026-09-10T14:30:00Z","duration_minutes":90}'
+
+# 409 Conflict - overlaps a session already logged
+curl -i -X POST "$BASE/study_sessions" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"course_id":12,"started_at":"2026-09-10T15:00:00Z","duration_minutes":60}'
